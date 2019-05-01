@@ -1,0 +1,160 @@
+---
+title: "STATS 551 Final Project: Normal Models in Stan"
+author: "Emma Brennan-Wydra"
+date: "April 19, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(rstan)
+```
+
+```{r}
+# read in data
+nyc_taxi_data <- read.csv("data/nyc_taxi_data.csv", header=TRUE)
+
+# create data list for Stan model
+data_normal <-list(N = length(nyc_taxi_data$k),
+            K = 250,
+            x = nyc_taxi_data$k,
+            y = nyc_taxi_data$fare_amount + nyc_taxi_data$tip_amount)
+```
+
+## Hierarchical model: Normal/Inv-Gamma population priors
+
+```{r}
+# fit the model
+fit_normal <- stan(file = 'stan-files/NYC_NormalInvGamma.stan', data = data_normal)
+```
+
+```{r}
+# checking output
+print(fit_normal, probs = c(0.025, 0.5, 0.975)) 
+```
+
+```{r}
+# checking output for hyperparameters
+print(fit_normal, pars=c('alpha','beta','mu0','musigma0'), probs = c(0.025, 0.5, 0.975)) 
+```
+
+```{r}
+# autocorrelation plot for hyperparameters
+stan_ac(fit_normal, pars=c('alpha','beta','mu0','musigma0'))
+```
+
+```{r}
+# write posterior samples to a csv
+samples_normal_unknown_params <- as.data.frame(fit_normal)
+write.csv(samples_normal_unknown_params, file = "samples_normal_unknown_params.csv")
+```
+
+```{r}
+# extract posterior means for mean fare and variance in each cluster
+samples <- rstan::extract(fit_normal)
+mu_means = array(0, 250)
+cluster = array(0, 250)
+for(k in 1:250){
+  this_mean = mean(samples$mu[,k])
+  mu_means[k] = this_mean
+  cluster[k] = k
+}
+
+sigma_means = array(0, 250)
+for(k in 1:250){
+  this_mean = mean(samples$sigma[,k])
+  sigma_means[k] = this_mean
+  cluster[k] = k
+}
+
+# create a new data frame 
+x <- cluster
+y <- mu_means
+z <- sigma_means
+x_name <- "cluster"
+y_name <- "mu_post_mean"
+z_name <- "sigma_post_mean"
+
+df <- data.frame(x,y,z)
+names(df) <- c(x_name,y_name,z_name)
+df_sorted <- df[order(-y),]
+```
+
+```{r}
+write.csv(df_sorted, file = "mu_sigma_post_means_normal_unknown_params.csv")
+```
+
+```{r}
+head(df_sorted, n=10) # top ten clusters for big tips
+tail(df_sorted, n=10) # bottom ten clusters for big tips
+```
+
+```{r}
+# plotting the top 5 and bottom 5 clusters
+plot(fit_normal, show_density = TRUE, pars = 
+       c("mu[14]", "mu[62]", "mu[110]", "mu[11]", "mu[136]",
+         "mu[101]","mu[188]", "mu[236]", "mu[43]", "mu[185]"))
+```
+
+
+## Fixed parameters for Normal/Inv-Gamma population priors
+
+### In this case, we set $\mu_0=15, \sigma_0^2=86, \alpha=5, \beta=56$.
+
+```{r}
+# fit the model
+fit_normal2 <- stan(file = 'stan-files/NYC_NormalInvGamma_2.stan', data = data_normal)
+```
+
+```{r}
+# checking output
+print(fit_normal2, probs = c(0.025, 0.5, 0.975)) 
+```
+
+```{r}
+samples_normal_fixed_params <- as.data.frame(fit_normal2)
+write.csv(samples_normal_fixed_params, file = "samples_normal_fixed_params.csv")
+```
+
+```{r}
+samples <- rstan::extract(fit_normal2)
+mu_means = array(0, 250)
+cluster = array(0, 250)
+for(k in 1:250){
+  this_mean = mean(samples$mu[,k])
+  mu_means[k] = this_mean
+  cluster[k] = k
+}
+
+sigma_means = array(0, 250)
+for(k in 1:250){
+  this_mean = mean(samples$sigma[,k])
+  sigma_means[k] = this_mean
+  cluster[k] = k
+}
+
+x <- cluster
+y <- mu_means
+z <- sigma_means
+x_name <- "cluster"
+y_name <- "mu_post_mean"
+z_name <- "sigma_post_mean"
+
+df2 <- data.frame(x,y,z)
+names(df2) <- c(x_name,y_name,z_name)
+df_sorted2 <- df2[order(-y),]
+```
+
+```{r}
+write.csv(df_sorted2, file = "mu_sigma_post_means_normal_fixed_params.csv")
+```
+
+```{r}
+head(df_sorted2, n=10) # top ten clusters for big tips
+tail(df_sorted2, n=10) # bottom ten clusters for big tips
+```
+```{r}
+plot(fit_normal2, show_density = TRUE, pars = 
+       c("mu[201]", "mu[14]", "mu[30]", "mu[92]", "mu[9]",
+         "mu[142]","mu[160]", "mu[207]", "mu[80]", "mu[39]"))
+```

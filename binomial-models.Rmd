@@ -1,0 +1,130 @@
+---
+title: "STATS 551 Final Project: Beta-Binomial Models in Stan"
+author: "Emma Brennan-Wydra"
+date: "April 19, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(rstan)
+```
+
+```{r}
+# read in data
+binomial_csv <- read.csv("data/beta_binomial_data.csv")
+```
+
+```{r}
+# create data list for Stan model
+data_binomial <- list(
+  K = 240,
+  n = binomial_csv$counts,
+  y = binomial_csv$heavy_tipper_no
+)
+```
+
+## Fixed parameters for Beta population prior: Beta(1.41,4.28) 
+
+```{r}
+# fit Stan model
+fit_binomial <- stan(file = 'stan-files/NYC_BetaBinomial.stan', data = data_binomial)
+```
+
+```{r}
+# checking output
+print(fit_binomial, probs = c(0.025, 0.5, 0.975))
+```
+
+```{r}
+# write posterior samples to csv
+samples_binomial_fixed_params <- as.data.frame(fit_binomial)
+write.csv(samples_binomial_fixed_params, file = "samples_binomial_fixed_params.csv")
+```
+
+```{r}
+# create array of posterior means
+samples <- rstan::extract(fit_binomial)
+thetas = array(0, 240)
+for(k in 1:240){
+  this_theta = mean(samples$theta[,k])
+  thetas[k] = this_theta
+}
+
+# make a new dataframe of posterior means
+x <- binomial_csv$k
+y <- thetas
+x_name <- "cluster"
+y_name <- "theta"
+
+df <- data.frame(x,y)
+names(df) <- c(x_name,y_name)
+df_sorted <- df[order(-y),]
+```
+
+```{r}
+# write this new dataframe to a csv
+write.csv(df_sorted, file = "theta_post_means_binomial_fixed_params.csv")
+```
+
+```{r}
+head(df_sorted, n=10) # top ten clusters for big tips
+tail(df_sorted, n=10) # bottom ten clusters for big tips
+```
+```{r}
+# plot the top and bottom 5
+plot(fit_binomial, show_density = TRUE, pars = 
+       c("theta[224]", "theta[189]", "theta[190]","theta[195]", "theta[233]",
+         "theta[169]", "theta[201]", "theta[167]", "theta[197]", "theta[177]"))
+```
+
+## Unknown parameters for Beta population prior (hierarchical rat tumor model from BDA3)
+
+```{r}
+# fit the hierarchical model
+fit_binomial2 <- stan(file = 'stan-files/NYC_BetaBinomial2.stan', data = data_binomial, control = list(max_treedepth = 12))
+```
+
+```{r}
+# checking output
+print(fit_binomial2, pars=c("alpha","beta","theta"), probs = c(0.025, 0.5, 0.975))
+```
+
+```{r}
+# write posterior samples to csv
+samples_binomial_unknown_params <- as.data.frame(fit_binomial2)
+write.csv(samples_binomial_unknown_params, file = "samples_binomial_unknown_params.csv")
+```
+
+```{r}
+samples2 <- rstan::extract(fit_binomial2)
+thetas = array(0, 240)
+for(k in 1:240){
+  this_theta = mean(samples2$theta[,k])
+  thetas[k] = this_theta
+}
+
+x <- binomial_csv$k
+y <- thetas
+x_name <- "cluster"
+y_name <- "theta"
+
+df2 <- data.frame(x,y)
+names(df2) <- c(x_name,y_name)
+df_sorted2 <- df2[order(-y),]
+```
+
+```{r}
+write.csv(df_sorted2, file = "theta_post_means_binomial_unknown_params.csv")
+```
+
+```{r}
+head(df_sorted2, n=10) # top ten clusters for big tips
+tail(df_sorted2, n=10) # bottom ten clusters for big tips (worst is last)
+```
+```{r}
+# plot the top and bottom 5 clusters
+plot(fit_binomial2, show_density = TRUE, pars = 
+       c("theta[26]", "theta[3]", "theta[1]","theta[35]", "theta[119]",
+         "theta[47]", "theta[42]", "theta[79]","theta[73]", "theta[59]"))
+```
